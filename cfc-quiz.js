@@ -219,22 +219,20 @@
     failEl: null
   };
 
-  // MutationObserver that strips w--redirected-checked from any radio Webflow
-  // auto-checks, unless the parent label already has our .is-selected class.
-  // Started synchronously so it's active before any DOMContentLoaded handler.
+  // Set of .w-radio-input elements that OUR code has intentionally checked.
+  // The observer allows w--redirected-checked only when the element is in this set,
+  // making it immune to Webflow adding .is-selected or any other class interference.
+  var _approvedRadioInputs = new Set();
+
   var _radioObserver = (typeof MutationObserver !== 'undefined')
     ? new MutationObserver(function (mutations) {
         mutations.forEach(function (m) {
           if (!m.target.classList) return;
           if (m.target.classList.contains('w-radio-input') &&
-              m.target.classList.contains('w--redirected-checked')) {
-            var parentLabel = m.target.closest
-              ? m.target.closest(DW_QUIZ_CONFIG.selectors.answer)
-              : null;
-            if (!parentLabel || !parentLabel.classList.contains('is-selected')) {
-              console.log('[DWQuiz] observer: blocked auto-check on', m.target);
-              m.target.classList.remove('w--redirected-checked');
-            }
+              m.target.classList.contains('w--redirected-checked') &&
+              !_approvedRadioInputs.has(m.target)) {
+            console.log('[DWQuiz] observer: blocked auto-check on', m.target);
+            m.target.classList.remove('w--redirected-checked');
           }
         });
       })
@@ -541,11 +539,15 @@
     var existing = state.answers[index];
     pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer).forEach(function (label, aIdx) {
       var isSelected = existing && !existing.skipped && existing.answerIndex === aIdx;
-      label.classList.toggle('is-selected', isSelected);
+      label.classList.toggle('dw-is-selected', isSelected);
       var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
       if (input) input.checked = isSelected;
       var radioInput = label.querySelector('.w-radio-input');
-      if (radioInput) radioInput.classList.toggle('w--redirected-checked', isSelected);
+      if (radioInput) {
+        if (isSelected) _approvedRadioInputs.add(radioInput);
+        else _approvedRadioInputs.delete(radioInput);
+        radioInput.classList.toggle('w--redirected-checked', isSelected);
+      }
     });
 
     setBackVisible(index > 0);
@@ -599,11 +601,15 @@
     var answers = pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer);
     answers.forEach(function (label, i) {
       var sel = i === answerIndex;
-      label.classList.toggle('is-selected', sel);
+      label.classList.toggle('dw-is-selected', sel);
       var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
       if (input) input.checked = sel;
       var radioInput = label.querySelector('.w-radio-input');
-      if (radioInput) radioInput.classList.toggle('w--redirected-checked', sel);
+      if (radioInput) {
+        if (sel) _approvedRadioInputs.add(radioInput);
+        else _approvedRadioInputs.delete(radioInput);
+        radioInput.classList.toggle('w--redirected-checked', sel);
+      }
     });
 
     var letter = ANSWER_LETTERS[answerIndex] || String(answerIndex);
