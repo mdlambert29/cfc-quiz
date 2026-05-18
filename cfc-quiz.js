@@ -436,7 +436,7 @@
   }
 
   function startQuiz() {
-    document.querySelectorAll('[data-quiz-cover], .quiz_cover, .quiz-intro').forEach(function (el) {
+    document.querySelectorAll('[data-quiz-cover], .quiz_cover, .quiz-intro, .quiz_start').forEach(function (el) {
       el.classList.add('is-hidden');
       el.style.display = 'none';
     });
@@ -468,7 +468,7 @@
     var pane = dom.panes[index];
     pane.classList.add('is-active');
     pane.setAttribute('aria-hidden', 'false');
-    pane.style.display = '';
+    pane.style.display = 'block';
 
     state.currentIndex = index;
 
