@@ -18,7 +18,8 @@
       success: '.w-form-done',
       fail: '.w-form-fail',
       contactGate: '[data-quiz-contact-gate]',
-      results: '[data-quiz-results]'
+      results: '[data-quiz-results]',
+      quizWrapper: '.quiz_start'   // outer section replaced by the contact gate
     },
     scoring: {
       // Knowledge quiz: 1 point per correct answer, 0 for wrong or skipped.
@@ -211,6 +212,7 @@
     root: null,
     panes: [],
     back: null,
+    quizWrapper: null,
     contactGate: null,
     results: null,
     successEl: null,
@@ -245,6 +247,7 @@
     } else if (wasRestored && state.contactSubmitted && state.result) {
       hideAllPanes();
       if (dom.root) dom.root.style.display = 'none';
+      if (dom.quizWrapper) dom.quizWrapper.style.display = 'none';
       showResults();
     } else {
       hideAllPanes();
@@ -266,8 +269,13 @@
         var letter = ANSWER_LETTERS[aIdx] || String(aIdx);
         label.setAttribute('data-quiz-answer', letter);
 
+        // Clear any pre-checked visual state Webflow may have applied
+        var radioInput = label.querySelector('.w-radio-input');
+        if (radioInput) radioInput.classList.remove('w--redirected-checked');
+
         var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
         if (input) {
+          input.checked = false;
           // Detect legacy markup where all radios share name="radio"
           var alreadyUnique = /^Q\d+$/i.test(input.name || '') ||
                               (input.name && input.name !== 'radio' && input.name !== '');
@@ -292,6 +300,7 @@
     dom.root = document.querySelector(cfg.root);
     dom.panes = Array.from(document.querySelectorAll(cfg.panes));
     dom.back = document.querySelector(cfg.back);
+    dom.quizWrapper = document.querySelector(cfg.quizWrapper);
     dom.contactGate = document.querySelector(cfg.contactGate);
     dom.results = document.querySelector(cfg.results);
     dom.successEl = document.querySelector(cfg.success);
@@ -314,21 +323,22 @@
       firstBtn.parentNode.insertBefore(err, firstBtn);
     });
 
-    // Contact gate container if not in Webflow markup
+    // Contact gate and results containers — inserted after .quiz_start so they
+    // appear in the same visual slot when the quiz wrapper is hidden.
+    var insertAnchor = dom.quizWrapper || dom.root || document.body;
+
     if (!dom.contactGate) {
       var gate = document.createElement('div');
       gate.setAttribute('data-quiz-contact-gate', '');
-      gate.style.display = 'none';
-      var anchor = dom.root || document.body;
-      anchor.parentNode.insertBefore(gate, anchor.nextSibling);
+      gate.style.cssText = 'display:none;padding:5rem 0;';
+      insertAnchor.parentNode.insertBefore(gate, insertAnchor.nextSibling);
       dom.contactGate = gate;
     }
 
-    // Results container if not in Webflow markup
     if (!dom.results) {
       var res = document.createElement('div');
       res.setAttribute('data-quiz-results', '');
-      res.style.display = 'none';
+      res.style.cssText = 'display:none;padding:5rem 0;';
       dom.contactGate.parentNode.insertBefore(res, dom.contactGate.nextSibling);
       dom.results = res;
     }
@@ -620,6 +630,7 @@
     state.quizCompleted = true;
     hideAllPanes();
     if (dom.root) dom.root.style.display = 'none';
+    if (dom.quizWrapper) dom.quizWrapper.style.display = 'none';
     showContactGate();
   }
 
