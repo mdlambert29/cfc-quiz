@@ -19,7 +19,7 @@
       fail: '.w-form-fail',
       contactGate: '[data-quiz-contact-gate]',
       results: '[data-quiz-results]',
-      quizWrapper: '.quiz_start'   // outer section replaced by the contact gate
+      quizWrapper: null              // unused — .quiz_start hiding is handled by startQuiz()
     },
     scoring: {
       // Knowledge quiz: 1 point per correct answer, 0 for wrong or skipped.
@@ -219,6 +219,26 @@
     failEl: null
   };
 
+  // MutationObserver that strips w--redirected-checked from any radio Webflow
+  // auto-checks, unless the parent label already has our own .is-selected class
+  // (which only we apply in selectAnswer / goToQuestion).
+  var _radioObserver = (typeof MutationObserver !== 'undefined')
+    ? new MutationObserver(function (mutations) {
+        mutations.forEach(function (m) {
+          if (!m.target.classList) return;
+          if (m.target.classList.contains('w-radio-input') &&
+              m.target.classList.contains('w--redirected-checked')) {
+            var parentLabel = m.target.closest
+              ? m.target.closest(DW_QUIZ_CONFIG.selectors.answer)
+              : null;
+            if (!parentLabel || !parentLabel.classList.contains('is-selected')) {
+              m.target.classList.remove('w--redirected-checked');
+            }
+          }
+        });
+      })
+    : null;
+
   // ─── INIT ────────────────────────────────────────────────────────────────────
 
   function init() {
@@ -238,20 +258,17 @@
     cacheDom();
     injectSupportElements();
 
+    // Start observer before bindEvents so it's active for the entire session
+    if (_radioObserver) {
+      _radioObserver.observe(document.body, {
+        attributes: true,
+        attributeFilter: ['class'],
+        subtree: true
+      });
+    }
+
     var wasRestored = restoreState();
     bindEvents();
-
-    // Defer radio clear past Webflow's own form initialisation, which also
-    // fires on DOMContentLoaded and re-adds w--redirected-checked to the first
-    // radio in each group.
-    setTimeout(function () {
-      document.querySelectorAll(DW_QUIZ_CONFIG.selectors.panes + ' .w-radio-input').forEach(function (el) {
-        el.classList.remove('w--redirected-checked');
-      });
-      document.querySelectorAll(DW_QUIZ_CONFIG.selectors.panes + ' ' + DW_QUIZ_CONFIG.selectors.answerInput).forEach(function (el) {
-        el.checked = false;
-      });
-    }, 0);
 
     if (wasRestored && state.startedAt && !state.contactSubmitted) {
       hideAllPanes();
@@ -259,7 +276,7 @@
     } else if (wasRestored && state.contactSubmitted && state.result) {
       hideAllPanes();
       if (dom.root) dom.root.style.display = 'none';
-      if (dom.quizWrapper) dom.quizWrapper.style.display = 'none';
+      document.querySelectorAll('.quiz_start').forEach(function (el) { el.style.display = 'none'; });
       showResults();
     } else {
       hideAllPanes();
@@ -335,9 +352,9 @@
       firstBtn.parentNode.insertBefore(err, firstBtn);
     });
 
-    // Contact gate and results containers — inserted after .quiz_start so they
-    // appear in the same visual slot when the quiz wrapper is hidden.
-    var insertAnchor = dom.quizWrapper || dom.root || document.body;
+    // Contact gate and results containers — inserted after the quiz form so they
+    // appear in the same visual slot when the form is hidden.
+    var insertAnchor = dom.root || document.body;
 
     if (!dom.contactGate) {
       var gate = document.createElement('div');
@@ -472,19 +489,15 @@
 
     state.currentIndex = index;
 
-    // Restore or clear visual selection.
-    // Wrapped in rAF so our state wins over any Webflow re-init that fires
-    // when the pane's display changes.
+    // Restore or clear visual selection
     var existing = state.answers[index];
-    requestAnimationFrame(function () {
-      pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer).forEach(function (label, aIdx) {
-        var isSelected = existing && !existing.skipped && existing.answerIndex === aIdx;
-        label.classList.toggle('is-selected', isSelected);
-        var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
-        if (input) input.checked = isSelected;
-        var radioInput = label.querySelector('.w-radio-input');
-        if (radioInput) radioInput.classList.toggle('w--redirected-checked', isSelected);
-      });
+    pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer).forEach(function (label, aIdx) {
+      var isSelected = existing && !existing.skipped && existing.answerIndex === aIdx;
+      label.classList.toggle('is-selected', isSelected);
+      var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
+      if (input) input.checked = isSelected;
+      var radioInput = label.querySelector('.w-radio-input');
+      if (radioInput) radioInput.classList.toggle('w--redirected-checked', isSelected);
     });
 
     setBackVisible(index > 0);
