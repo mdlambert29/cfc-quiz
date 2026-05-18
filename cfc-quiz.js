@@ -220,8 +220,8 @@
   };
 
   // MutationObserver that strips w--redirected-checked from any radio Webflow
-  // auto-checks, unless the parent label already has our own .is-selected class
-  // (which only we apply in selectAnswer / goToQuestion).
+  // auto-checks, unless the parent label already has our .is-selected class.
+  // Started synchronously so it's active before any DOMContentLoaded handler.
   var _radioObserver = (typeof MutationObserver !== 'undefined')
     ? new MutationObserver(function (mutations) {
         mutations.forEach(function (m) {
@@ -232,12 +232,22 @@
               ? m.target.closest(DW_QUIZ_CONFIG.selectors.answer)
               : null;
             if (!parentLabel || !parentLabel.classList.contains('is-selected')) {
+              console.log('[DWQuiz] observer: blocked auto-check on', m.target);
               m.target.classList.remove('w--redirected-checked');
             }
           }
         });
       })
     : null;
+
+  // Start immediately — catches Webflow radio init regardless of script order
+  if (_radioObserver) {
+    _radioObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+      subtree: true
+    });
+  }
 
   // ─── INIT ────────────────────────────────────────────────────────────────────
 
@@ -254,28 +264,28 @@
       console.warn('[DWQuiz] Config has ' + qCount + ' questions but found ' + panes.length + ' panes. Continuing with DOM count.');
     }
 
+    console.log('[DWQuiz] init: found ' + panes.length + ' panes');
+
     normalizeMarkup(panes);
     cacheDom();
     injectSupportElements();
 
-    // Start observer before bindEvents so it's active for the entire session
-    if (_radioObserver) {
-      _radioObserver.observe(document.body, {
-        attributes: true,
-        attributeFilter: ['class'],
-        subtree: true
-      });
-    }
-
     var wasRestored = restoreState();
+    console.log('[DWQuiz] init: sessionStorage restored =', wasRestored,
+      '| startedAt =', state.startedAt,
+      '| contactSubmitted =', state.contactSubmitted);
+
     bindEvents();
 
     if (wasRestored && state.startedAt && !state.contactSubmitted) {
+      console.log('[DWQuiz] init: resuming at question', state.currentIndex);
       goToQuestion(state.currentIndex);
     } else if (wasRestored && state.contactSubmitted && state.result) {
+      console.log('[DWQuiz] init: restoring completed results');
       _setScreen('results');
       showResults();
     } else {
+      console.log('[DWQuiz] init: fresh start → intro screen');
       _setScreen('intro');
     }
   }
@@ -302,6 +312,7 @@
         var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
         if (input) {
           input.checked = false;
+          input.removeAttribute('checked'); // strip HTML attribute Webflow may have set
           // Detect legacy markup where all radios share name="radio"
           var alreadyUnique = /^Q\d+$/i.test(input.name || '') ||
                               (input.name && input.name !== 'radio' && input.name !== '');
@@ -431,6 +442,7 @@
     if (dom.back) {
       dom.back.addEventListener('click', function (e) {
         e.preventDefault();
+        console.log('[DWQuiz] back clicked at Q' + (state.currentIndex + 1));
         if (state.currentIndex > 0) goToQuestion(state.currentIndex - 1);
       });
     }
@@ -446,13 +458,15 @@
 
   function handleIntroCtaClick(e) {
     e.preventDefault();
+    console.log('[DWQuiz] begin button clicked');
     startQuiz();
   }
 
   function startQuiz() {
+    console.log('[DWQuiz] startQuiz');
     state.startedAt = new Date().toISOString();
     pushEvent('dw_quiz_started');
-    goToQuestion(0); // _setScreen(0) inside hides .quiz_start and all other panes
+    goToQuestion(0);
   }
 
   // ─── SCREEN MANAGEMENT ───────────────────────────────────────────────────────
@@ -460,6 +474,7 @@
   // then shows exactly one. Pass a number for a question pane index.
 
   function _setScreen(screen) {
+    console.log('[DWQuiz] _setScreen:', typeof screen === 'number' ? 'question ' + screen : screen);
     // Hide cover slide(s)
     document.querySelectorAll('.quiz_start').forEach(function (el) {
       el.style.display = 'none';
@@ -511,7 +526,11 @@
   // ─── NAVIGATION ──────────────────────────────────────────────────────────────
 
   function goToQuestion(index) {
-    if (index < 0 || index >= dom.panes.length) return;
+    if (index < 0 || index >= dom.panes.length) {
+      console.warn('[DWQuiz] goToQuestion: invalid index', index);
+      return;
+    }
+    console.log('[DWQuiz] goToQuestion:', index, '(Q' + (index + 1) + ' of ' + dom.panes.length + ')');
 
     _setScreen(index);
 
@@ -575,6 +594,7 @@
   function selectAnswer(questionIndex, answerIndex) {
     var pane = dom.panes[questionIndex];
     if (!pane) return;
+    console.log('[DWQuiz] selectAnswer: Q' + (questionIndex + 1) + ' → ' + (ANSWER_LETTERS[answerIndex] || answerIndex));
 
     var answers = pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer);
     answers.forEach(function (label, i) {
@@ -622,6 +642,7 @@
   // ─── SKIP ────────────────────────────────────────────────────────────────────
 
   function skipQuestion(questionIndex) {
+    console.log('[DWQuiz] skipQuestion: Q' + (questionIndex + 1));
     var qData = DW_QUIZ_CONFIG.questions[questionIndex] || {};
     state.answers[questionIndex] = {
       questionIndex: questionIndex,
@@ -650,10 +671,12 @@
 
   function handleNextClick() {
     var idx = state.currentIndex;
+    console.log('[DWQuiz] next clicked at Q' + (idx + 1));
 
     if (DW_QUIZ_CONFIG.behavior.requireAnswerForNext) {
       var ans = state.answers[idx];
       if (!ans || ans.skipped || !ans.answerLetter) {
+        console.log('[DWQuiz] next blocked — no answer selected');
         showPaneError(
           dom.panes[idx],
           'Please select an answer, or click “Skip this question” to continue.'
@@ -663,6 +686,7 @@
     }
 
     if (idx === dom.panes.length - 1) {
+      console.log('[DWQuiz] last question — submitting quiz');
       submitQuiz();
     } else {
       goToQuestion(idx + 1);
