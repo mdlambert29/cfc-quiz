@@ -271,15 +271,12 @@
     bindEvents();
 
     if (wasRestored && state.startedAt && !state.contactSubmitted) {
-      hideAllPanes();
       goToQuestion(state.currentIndex);
     } else if (wasRestored && state.contactSubmitted && state.result) {
-      hideAllPanes();
-      if (dom.root) dom.root.style.display = 'none';
-      document.querySelectorAll('.quiz_start').forEach(function (el) { el.style.display = 'none'; });
+      _setScreen('results');
       showResults();
     } else {
-      hideAllPanes();
+      _setScreen('intro');
     }
   }
 
@@ -453,40 +450,72 @@
   }
 
   function startQuiz() {
-    document.querySelectorAll('[data-quiz-cover], .quiz_cover, .quiz-intro, .quiz_start').forEach(function (el) {
-      el.classList.add('is-hidden');
-      el.style.display = 'none';
-    });
     state.startedAt = new Date().toISOString();
     pushEvent('dw_quiz_started');
-    goToQuestion(0);
+    goToQuestion(0); // _setScreen(0) inside hides .quiz_start and all other panes
+  }
+
+  // ─── SCREEN MANAGEMENT ───────────────────────────────────────────────────────
+  // Single entry point for all visibility changes. Hides every region first,
+  // then shows exactly one. Pass a number for a question pane index.
+
+  function _setScreen(screen) {
+    // Hide cover slide(s)
+    document.querySelectorAll('.quiz_start').forEach(function (el) {
+      el.style.display = 'none';
+    });
+    // Hide quiz form and all panes
+    if (dom.root) dom.root.style.display = 'none';
+    dom.panes.forEach(function (pane) {
+      pane.classList.remove('is-active');
+      pane.setAttribute('aria-hidden', 'true');
+      pane.style.display = 'none';
+    });
+    // Hide post-quiz regions
+    if (dom.contactGate) {
+      dom.contactGate.style.display = 'none';
+      dom.contactGate.classList.remove('is-active');
+    }
+    if (dom.results) {
+      dom.results.style.display = 'none';
+      dom.results.classList.remove('is-active');
+    }
+    setBackVisible(false);
+
+    // Show only the requested region
+    if (screen === 'intro') {
+      document.querySelectorAll('.quiz_start').forEach(function (el) {
+        el.style.display = '';
+      });
+    } else if (typeof screen === 'number') {
+      if (dom.root) dom.root.style.display = '';
+      var pane = dom.panes[screen];
+      if (pane) {
+        pane.classList.add('is-active');
+        pane.setAttribute('aria-hidden', 'false');
+        pane.style.display = 'block';
+      }
+    } else if (screen === 'contact') {
+      if (dom.contactGate) {
+        dom.contactGate.style.display = '';
+        dom.contactGate.classList.add('is-active');
+      }
+    } else if (screen === 'results') {
+      if (dom.results) {
+        dom.results.style.display = '';
+        dom.results.classList.add('is-active');
+      }
+    }
   }
 
   // ─── NAVIGATION ──────────────────────────────────────────────────────────────
 
-  function hideAllPanes() {
-    dom.panes.forEach(function (pane) {
-      pane.classList.remove('is-active');
-      pane.setAttribute('aria-hidden', 'true');
-      pane.style.display = 'none';
-    });
-    setBackVisible(false);
-  }
-
   function goToQuestion(index) {
     if (index < 0 || index >= dom.panes.length) return;
 
-    dom.panes.forEach(function (pane) {
-      pane.classList.remove('is-active');
-      pane.setAttribute('aria-hidden', 'true');
-      pane.style.display = 'none';
-    });
+    _setScreen(index);
 
     var pane = dom.panes[index];
-    pane.classList.add('is-active');
-    pane.setAttribute('aria-hidden', 'false');
-    pane.style.display = 'block';
-
     state.currentIndex = index;
 
     // Restore or clear visual selection
@@ -657,9 +686,6 @@
   function submitQuiz() {
     calculateResults();
     state.quizCompleted = true;
-    hideAllPanes();
-    if (dom.root) dom.root.style.display = 'none';
-    if (dom.quizWrapper) dom.quizWrapper.style.display = 'none';
     showContactGate();
   }
 
@@ -736,10 +762,7 @@
   // ─── CONTACT GATE ────────────────────────────────────────────────────────────
 
   function showContactGate() {
-    if (dom.contactGate) {
-      dom.contactGate.style.display = '';
-      dom.contactGate.classList.add('is-active');
-    }
+    _setScreen('contact'); // hides quiz_start, form, all panes; shows gate
 
     var mkto = DW_QUIZ_CONFIG.integrations.marketo;
     if (mkto.enabled && window.MktoForms2) {
@@ -901,10 +924,7 @@
     state.completedAt = new Date().toISOString();
     state.contactSubmitted = true;
 
-    if (dom.contactGate) {
-      dom.contactGate.style.display = 'none';
-      dom.contactGate.classList.remove('is-active');
-    }
+    _setScreen('results'); // hides everything, shows results container
     if (dom.successEl) dom.successEl.style.display = 'none';
 
     var r = state.result || {};
@@ -957,8 +977,6 @@
 
     if (dom.results) {
       dom.results.innerHTML = html;
-      dom.results.style.display = '';
-      dom.results.classList.add('is-active');
       dom.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
