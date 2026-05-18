@@ -241,6 +241,18 @@
     var wasRestored = restoreState();
     bindEvents();
 
+    // Defer radio clear past Webflow's own form initialisation, which also
+    // fires on DOMContentLoaded and re-adds w--redirected-checked to the first
+    // radio in each group.
+    setTimeout(function () {
+      document.querySelectorAll(DW_QUIZ_CONFIG.selectors.panes + ' .w-radio-input').forEach(function (el) {
+        el.classList.remove('w--redirected-checked');
+      });
+      document.querySelectorAll(DW_QUIZ_CONFIG.selectors.panes + ' ' + DW_QUIZ_CONFIG.selectors.answerInput).forEach(function (el) {
+        el.checked = false;
+      });
+    }, 0);
+
     if (wasRestored && state.startedAt && !state.contactSubmitted) {
       hideAllPanes();
       goToQuestion(state.currentIndex);
@@ -460,15 +472,19 @@
 
     state.currentIndex = index;
 
-    // Restore or clear visual selection
+    // Restore or clear visual selection.
+    // Wrapped in rAF so our state wins over any Webflow re-init that fires
+    // when the pane's display changes.
     var existing = state.answers[index];
-    pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer).forEach(function (label, aIdx) {
-      var isSelected = existing && !existing.skipped && existing.answerIndex === aIdx;
-      label.classList.toggle('is-selected', isSelected);
-      var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
-      if (input) input.checked = isSelected;
-      var radioInput = label.querySelector('.w-radio-input');
-      if (radioInput) radioInput.classList.toggle('w--redirected-checked', isSelected);
+    requestAnimationFrame(function () {
+      pane.querySelectorAll(DW_QUIZ_CONFIG.selectors.answer).forEach(function (label, aIdx) {
+        var isSelected = existing && !existing.skipped && existing.answerIndex === aIdx;
+        label.classList.toggle('is-selected', isSelected);
+        var input = label.querySelector(DW_QUIZ_CONFIG.selectors.answerInput);
+        if (input) input.checked = isSelected;
+        var radioInput = label.querySelector('.w-radio-input');
+        if (radioInput) radioInput.classList.toggle('w--redirected-checked', isSelected);
+      });
     });
 
     setBackVisible(index > 0);
