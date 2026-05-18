@@ -358,6 +358,16 @@
       firstBtn.parentNode.insertBefore(err, firstBtn);
     });
 
+    // Inject quiz-specific styles once
+    if (!document.getElementById('dw-quiz-styles')) {
+      var style = document.createElement('style');
+      style.id = 'dw-quiz-styles';
+      style.textContent =
+        '[data-quiz-results]{background:#1a3e66;color:#fff;}' +
+        '.dw-review{color:#555;}';
+      document.head.appendChild(style);
+    }
+
     // Contact gate and results containers — inserted after the quiz form so they
     // appear in the same visual slot when the form is hidden.
     var insertAnchor = dom.root || document.body;
