@@ -375,7 +375,7 @@
     if (!dom.contactGate) {
       var gate = document.createElement('div');
       gate.setAttribute('data-quiz-contact-gate', '');
-      gate.style.cssText = 'display:none;padding:5rem 0;background.color:#e9eeff;min-height:100vh;';
+      gate.style.cssText = 'display:none;padding:5rem 0;background-color:#e9eeff;min-height:100vh;';
       insertAnchor.parentNode.insertBefore(gate, insertAnchor.nextSibling);
       dom.contactGate = gate;
     }
