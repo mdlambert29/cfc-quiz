@@ -52,7 +52,7 @@
       requireAnswerForNext: true,
       allowSkip: true,
       scrollToTopOnPaneChange: true,
-      persistInSessionStorage: true,
+      persistInSessionStorage: false, // set true to resume mid-quiz on reload
       showCorrectAnswersInResults: true  // flip to false to hide which answers were right
     },
     integrations: {
