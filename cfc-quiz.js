@@ -60,7 +60,7 @@
         enabled: true,
         formId: null,          // set to your Marketo form ID, e.g. 1234
         munchkinId: null,      // set to your Munchkin account ID, e.g. '123-ABC-456'
-        talkToExpertUrl: null, // set to destination URL for Talk to Expert CTA
+        talkToExpertUrl: '/purchase/request-a-demo',
         hiddenFieldMap: {
           score: 'digitalWellbeingQuizScore',
           scorePercent: 'digitalWellbeingQuizPercent',
@@ -726,7 +726,8 @@
   function submitQuiz() {
     calculateResults();
     state.quizCompleted = true;
-    showContactGate();
+    _setScreen('results');
+    showResults();
   }
 
   // ─── SCORING ─────────────────────────────────────────────────────────────────
@@ -964,55 +965,79 @@
     state.completedAt = new Date().toISOString();
     state.contactSubmitted = true;
 
-    _setScreen('results'); // hides everything, shows results container
-    if (dom.successEl) dom.successEl.style.display = 'none';
-
     var r = state.result || {};
-    var showCorrect = DW_QUIZ_CONFIG.behavior.showCorrectAnswersInResults;
+    var ctaUrl = DW_QUIZ_CONFIG.integrations.marketo.talkToExpertUrl || '/purchase/request-a-demo';
 
-    var reviewRows = '';
-    if (showCorrect) {
-      reviewRows = DW_QUIZ_CONFIG.questions.map(function (q, i) {
-        var ans = state.answers[i];
-        var skipped = !ans || ans.skipped;
-        var correct = ans && ans.isCorrect;
-        var icon = skipped ? '—' : (correct ? '✅' : '❌');
-        var chosen = ans && ans.answerLetter ? ans.answerLetter + '. ' + escHtml(ans.answerText || '') : 'Skipped';
-        var correctText = q.correctAnswer + '. ' + escHtml(q.answers[ANSWER_LETTERS.indexOf(q.correctAnswer)] || '');
+    // Build question review rows
+    var reviewRows = DW_QUIZ_CONFIG.questions.map(function (q, i) {
+      var ans = state.answers[i];
+      var skipped = !ans || ans.skipped;
+      var correct = ans && ans.isCorrect;
+      var icon = skipped ? '—' : (correct ? '✅' : '❌');
+      var chosen = ans && ans.answerLetter
+        ? ans.answerLetter + '. ' + escHtml(ans.answerText || '')
+        : 'Skipped';
+      var correctText = q.correctAnswer + '. ' +
+        escHtml(q.answers[ANSWER_LETTERS.indexOf(q.correctAnswer)] || '');
 
-        return '<div class="dw-review-row" style="margin-bottom:1rem;padding:.75rem;' +
-          'background:' + (correct ? '#f0faf0' : (skipped ? '#fafafa' : '#fff5f5')) + ';' +
-          'border-left:3px solid ' + (correct ? '#2e7d32' : (skipped ? '#999' : '#c62828')) + ';' +
-          'border-radius:0 4px 4px 0;">' +
-          '<p style="font-weight:600;margin:0 0 .25rem;">' + icon + ' Q' + (i + 1) + ': ' + escHtml(q.text) + '</p>' +
-          '<p style="margin:0 0 .1rem;font-size:.875rem;">Your answer: ' + chosen + '</p>' +
-          (!correct && !skipped
-            ? '<p style="margin:0;font-size:.875rem;color:#2e7d32;">Correct answer: ' + correctText + '</p>'
-            : '') +
+      return '<div class="dw-review-row" style="margin-bottom:1rem;padding:.75rem;' +
+        'background:' + (correct ? '#f0faf0' : (skipped ? '#fafafa' : '#fff5f5')) + ';' +
+        'border-left:3px solid ' + (correct ? '#2e7d32' : (skipped ? '#999' : '#c62828')) + ';' +
+        'border-radius:0 4px 4px 0;">' +
+        '<p style="font-weight:600;margin:0 0 .25rem;">' + icon + ' Q' + (i + 1) + ': ' + escHtml(q.text) + '</p>' +
+        '<p style="margin:0 0 .1rem;font-size:.875rem;">Your answer: ' + chosen + '</p>' +
+        (!correct && !skipped
+          ? '<p style="margin:0;font-size:.875rem;color:#2e7d32;">Correct answer: ' + correctText + '</p>'
+          : '') +
         '</div>';
-      }).join('');
-    }
+    }).join('');
 
     var html =
-      '<div class="dw-results-inner" style="max-width:680px;margin:0 auto;">' +
-        '<p class="dw-eyebrow" style="text-transform:uppercase;letter-spacing:.08em;' +
-          'color:#e07b00;font-weight:700;font-size:.875rem;margin-bottom:.5rem;">Your Results</p>' +
-        '<h2 style="margin-bottom:.5rem;">' + escHtml(r.tierLabel || '') + '</h2>' +
-        '<p style="font-size:1.125rem;margin-bottom:.25rem;">' +
-          'Score: <strong>' + (r.correctCount || 0) + ' / ' + (r.totalQuestions || 0) +
-          ' correct</strong> (' + (r.scorePercent || 0) + '%)' +
-        '</p>' +
-        '<p style="margin-bottom:1.5rem;">' + escHtml(r.tierMessage || '') + '</p>' +
-        (showCorrect && reviewRows
-          ? '<div class="dw-review" style="margin-bottom:2rem;"><h3 style="margin-bottom:1rem;">Question Review</h3>' + reviewRows + '</div>'
-          : '') +
-        '<hr style="margin:1.5rem 0;border:none;border-top:1px solid #ddd;">' +
-        '<p style="font-weight:700;font-size:1.125rem;">Your Results Point to an Opportunity</p>' +
-        '<p>The quiz shows what many educators are seeing: students need guidance to navigate ' +
+      '<div class="dw-results-inner" style="max-width:680px;margin:0 auto;padding:4rem 2rem;">' +
+
+        // Eyebrow
+        '<p style="text-transform:uppercase;letter-spacing:.08em;color:#e07b00;' +
+          'font-weight:700;font-size:.875rem;margin:0 0 1rem;">Your Results</p>' +
+
+        // Main headline
+        '<h2 style="margin:0 0 1.5rem;">Your Results Point to an Opportunity</h2>' +
+
+        // Marketing copy
+        '<p style="margin:0 0 1rem;">The quiz shows what many educators are seeing: students need guidance to navigate ' +
           'digital spaces safely, responsibly, and with confidence.</p>' +
-        '<p>The Second Step® Digital Well-Being specialized unit helps make that possible.</p>' +
-        '<a href="#" class="global-button w-button" data-quiz-talk-to-expert ' +
-          'style="display:inline-block;margin-top:1.5rem;">Talk to an expert</a>' +
+        '<p style="margin:0 0 1.5rem;">The Second Step® Digital Well-Being specialized unit helps make that possible.</p>' +
+
+        '<p style="font-weight:700;margin:0 0 .5rem;">Support students’ digital choices—on purpose</p>' +
+        '<p style="margin:0 0 .75rem;">This research-informed specialized unit helps students:</p>' +
+        '<ul style="margin:0 0 1.5rem 1.25rem;padding:0;line-height:1.7;">' +
+          '<li>Build healthy, responsible relationships with technology and AI</li>' +
+          '<li>Recognize what supports (or harms) their digital well-being</li>' +
+          '<li>Make smart, ethical decisions online—at school and beyond</li>' +
+        '</ul>' +
+        '<p style="margin:0 0 1.5rem;">Designed to integrate smoothly into instruction, it gives educators practical tools ' +
+          'to address today’s digital challenges with confidence.</p>' +
+
+        '<p style="font-weight:700;margin:0 0 .5rem;">Let’s talk about what’s right for your school</p>' +
+        '<p style="margin:0 0 2rem;">Connect with a Second Step expert to explore how the Digital Well-Being specialized unit ' +
+          'can support your students and goals.</p>' +
+
+        // CTA
+        '<a href="' + escHtml(ctaUrl) + '" class="global-button w-button" data-quiz-talk-to-expert ' +
+          'style="display:inline-block;">Talk to an expert</a>' +
+
+        // Divider
+        '<hr style="margin:3rem 0;border:none;border-top:1px solid rgba(255,255,255,.2);">' +
+
+        // Question review
+        '<div class="dw-review">' +
+          '<h3 style="margin:0 0 .5rem;">Question Review</h3>' +
+          '<p style="margin:0 0 1.5rem;">Score: <strong>' +
+            (r.correctCount || 0) + ' / ' + (r.totalQuestions || 0) +
+            ' correct</strong> (' + (r.scorePercent || 0) + '%)' +
+          '</p>' +
+          reviewRows +
+        '</div>' +
+
       '</div>';
 
     if (dom.results) {
@@ -1020,7 +1045,7 @@
       dom.results.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    pushEvent('dw_quiz_contact_submitted', {
+    pushEvent('dw_quiz_completed', {
       correctCount: r.correctCount,
       totalQuestions: r.totalQuestions,
       scorePercent: r.scorePercent,
