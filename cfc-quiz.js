@@ -726,8 +726,7 @@
   function submitQuiz() {
     calculateResults();
     state.quizCompleted = true;
-    _setScreen('results');
-    showResults();
+    showContactGate();
   }
 
   // ─── SCORING ─────────────────────────────────────────────────────────────────
