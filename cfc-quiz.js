@@ -20,7 +20,8 @@
       contactGate: '[data-quiz-contact-gate]',
       results: '[data-quiz-results]',
       quizWrapper: null,             // unused — .quiz_start hiding is handled by startQuiz()
-      formPane: '#quiz-form-pane'   // Webflow form pane used as contact gate
+      formPane: '#quiz-form-pane',  // Webflow pane shown as the contact gate
+      formTarget: '#form-target'    // element inside formPane where Marketo form is injected
     },
     scoring: {
       // Knowledge quiz: 1 point per correct answer, 0 for wrong or skipped.
@@ -59,8 +60,9 @@
     integrations: {
       marketo: {
         enabled: true,
-        formId: null,          // set to your Marketo form ID, e.g. 1234
-        munchkinId: null,      // set to your Munchkin account ID, e.g. '123-ABC-456'
+        serverUrl: '//go.secondstep.org',
+        munchkinId: '763-WVZ-393',
+        formId: 2039,
         talkToExpertUrl: '/purchase/request-a-demo',
         hiddenFieldMap: {
           score: 'digitalWellbeingQuizScore',
@@ -816,19 +818,10 @@
   function showContactGate() {
     _setScreen('contact'); // hides quiz_start, form, all panes; shows gate
 
-    if (dom.formPane) {
-      // Use the Webflow form pane already in the DOM
-      watchWebflowFormSuccess();
-      return;
-    }
-
     var mkto = DW_QUIZ_CONFIG.integrations.marketo;
-    if (mkto.enabled && window.MktoForms2) {
+    if (mkto.enabled && mkto.formId) {
       initMarketo();
     } else {
-      if (mkto.enabled) {
-        console.warn('[DWQuiz] MktoForms2 not found. Using fallback contact form.');
-      }
       renderFallbackForm();
     }
   }
@@ -870,14 +863,41 @@
   // ─── MARKETO INTEGRATION ─────────────────────────────────────────────────────
 
   function initMarketo() {
-    MktoForms2.whenReady(function (form) {
-      form.addHiddenFields(buildMarketoPayload());
-      form.onSuccess(function (values) {
-        state.contact = values || {};
-        showResults();
-        return false; // prevent Marketo's default redirect
+    var mkto = DW_QUIZ_CONFIG.integrations.marketo;
+    var cfg = DW_QUIZ_CONFIG.selectors;
+
+    // Inject <form id="mktoForm_XXXX"> into #form-target (inside formPane) or contactGate
+    var formElId = 'mktoForm_' + mkto.formId;
+    if (!document.getElementById(formElId)) {
+      var target = (dom.formPane && cfg.formTarget)
+        ? dom.formPane.querySelector(cfg.formTarget)
+        : dom.contactGate;
+      if (target) {
+        var formEl = document.createElement('form');
+        formEl.id = formElId;
+        target.appendChild(formEl);
+      }
+    }
+
+    function doLoad() {
+      MktoForms2.loadForm(mkto.serverUrl, mkto.munchkinId, mkto.formId, function (form) {
+        form.addHiddenFields(buildMarketoPayload());
+        form.onSuccess(function (values) {
+          state.contact = values || {};
+          showResults();
+          return false; // prevent Marketo's default redirect
+        });
       });
-    });
+    }
+
+    if (window.MktoForms2) {
+      doLoad();
+    } else {
+      var script = document.createElement('script');
+      script.src = mkto.serverUrl + '/js/forms2/js/forms2.min.js';
+      script.onload = doLoad;
+      document.head.appendChild(script);
+    }
   }
 
   function buildMarketoPayload() {
