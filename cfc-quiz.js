@@ -19,7 +19,8 @@
       fail: '.w-form-fail',
       contactGate: '[data-quiz-contact-gate]',
       results: '[data-quiz-results]',
-      quizWrapper: null              // unused — .quiz_start hiding is handled by startQuiz()
+      quizWrapper: null,             // unused — .quiz_start hiding is handled by startQuiz()
+      formPane: '#quiz-form-pane'   // Webflow form pane used as contact gate
     },
     scoring: {
       // Knowledge quiz: 1 point per correct answer, 0 for wrong or skipped.
@@ -213,6 +214,7 @@
     panes: [],
     back: null,
     quizWrapper: null,
+    formPane: null,
     contactGate: null,
     results: null,
     successEl: null,
@@ -336,6 +338,7 @@
     dom.panes = Array.from(document.querySelectorAll(cfg.panes));
     dom.back = document.querySelector(cfg.back);
     dom.quizWrapper = document.querySelector(cfg.quizWrapper);
+    dom.formPane = cfg.formPane ? document.querySelector(cfg.formPane) : null;
     dom.contactGate = document.querySelector(cfg.contactGate);
     dom.results = document.querySelector(cfg.results);
     dom.successEl = document.querySelector(cfg.success);
@@ -372,7 +375,8 @@
     // appear in the same visual slot when the form is hidden.
     var insertAnchor = dom.root || document.body;
 
-    if (!dom.contactGate) {
+    // Only create a JS contact gate div if the page has no Webflow form pane
+    if (!dom.formPane && !dom.contactGate) {
       var gate = document.createElement('div');
       gate.setAttribute('data-quiz-contact-gate', '');
       gate.style.cssText = 'display:none;padding:5rem 0;background-color:#e9eeff;min-height:100vh;';
@@ -384,7 +388,8 @@
       var res = document.createElement('div');
       res.setAttribute('data-quiz-results', '');
       res.style.cssText = 'display:none;padding:5rem 0;';
-      dom.contactGate.parentNode.insertBefore(res, dom.contactGate.nextSibling);
+      var resultAnchor = dom.formPane || dom.contactGate || insertAnchor;
+      resultAnchor.parentNode.insertBefore(res, resultAnchor.nextSibling);
       dom.results = res;
     }
   }
@@ -495,6 +500,10 @@
       pane.style.display = 'none';
     });
     // Hide post-quiz regions
+    if (dom.formPane) {
+      dom.formPane.style.display = 'none';
+      dom.formPane.classList.remove('is-active');
+    }
     if (dom.contactGate) {
       dom.contactGate.style.display = 'none';
       dom.contactGate.classList.remove('is-active');
@@ -519,7 +528,10 @@
         pane.style.display = 'block';
       }
     } else if (screen === 'contact') {
-      if (dom.contactGate) {
+      if (dom.formPane) {
+        dom.formPane.style.display = '';
+        dom.formPane.classList.add('is-active');
+      } else if (dom.contactGate) {
         dom.contactGate.style.display = '';
         dom.contactGate.classList.add('is-active');
       }
@@ -804,6 +816,12 @@
   function showContactGate() {
     _setScreen('contact'); // hides quiz_start, form, all panes; shows gate
 
+    if (dom.formPane) {
+      // Use the Webflow form pane already in the DOM
+      watchWebflowFormSuccess();
+      return;
+    }
+
     var mkto = DW_QUIZ_CONFIG.integrations.marketo;
     if (mkto.enabled && window.MktoForms2) {
       initMarketo();
@@ -813,6 +831,40 @@
       }
       renderFallbackForm();
     }
+  }
+
+  // Watches the Webflow form pane for its .w-form-done success block becoming
+  // visible (Webflow shows it after a successful AJAX form submission), then
+  // triggers showResults().
+  function watchWebflowFormSuccess() {
+    var successEl = dom.formPane.querySelector('.w-form-done');
+    if (!successEl) {
+      console.warn('[DWQuiz] No .w-form-done found in #quiz-form-pane. Falling back to submit event.');
+      var formEl = dom.formPane.querySelector('form');
+      if (formEl) {
+        formEl.addEventListener('submit', function () {
+          setTimeout(showResults, 1500);
+        }, { once: true });
+      }
+      return;
+    }
+
+    console.log('[DWQuiz] Watching #quiz-form-pane for Webflow form submission success');
+    var done = false;
+    var observer = new MutationObserver(function () {
+      if (done) return;
+      if (window.getComputedStyle(successEl).display !== 'none') {
+        done = true;
+        observer.disconnect();
+        console.log('[DWQuiz] Webflow form success detected — showing results');
+        showResults();
+      }
+    });
+
+    observer.observe(successEl, {
+      attributes: true,
+      attributeFilter: ['style', 'class']
+    });
   }
 
   // ─── MARKETO INTEGRATION ─────────────────────────────────────────────────────
@@ -963,6 +1015,8 @@
   function showResults() {
     state.completedAt = new Date().toISOString();
     state.contactSubmitted = true;
+
+    _setScreen('results');
 
     var r = state.result || {};
     var ctaUrl = DW_QUIZ_CONFIG.integrations.marketo.talkToExpertUrl || '/purchase/request-a-demo';
