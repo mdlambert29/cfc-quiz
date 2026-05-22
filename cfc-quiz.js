@@ -52,7 +52,7 @@
     },
     behavior: {
       requireAnswerForNext: true,
-      allowSkip: true,
+      allowSkip: false,
       scrollToTopOnPaneChange: true,
       persistInSessionStorage: false, // set true to resume mid-quiz on reload
       showCorrectAnswersInResults: true  // flip to false to hide which answers were right
@@ -444,6 +444,10 @@
       pane.querySelectorAll('a, span, div').forEach(function (el) {
         if (el.children.length === 0 &&
             el.textContent.trim().toLowerCase().indexOf('skip') !== -1) {
+          if (!DW_QUIZ_CONFIG.behavior.allowSkip) {
+            el.style.display = 'none';
+            return;
+          }
           el.style.cursor = 'pointer';
           el.addEventListener('click', function (e) {
             e.preventDefault();
@@ -709,7 +713,7 @@
         console.log('[DWQuiz] next blocked — no answer selected');
         showPaneError(
           dom.panes[idx],
-          'Please select an answer, or click “Skip this question” to continue.'
+          'Please select an answer to continue.'
         );
         return;
       }
